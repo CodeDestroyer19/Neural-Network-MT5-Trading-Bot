@@ -7,6 +7,6 @@ WORKDIR /app
 COPY bridge/mt5_bridge.py .
 
 # Install any dependencies required by the bridge script
-RUN pip install python-socketio python-engineio
+RUN pip install python-socketio python-engineio requests
 
 CMD ["python", "mt5_bridge.py"]

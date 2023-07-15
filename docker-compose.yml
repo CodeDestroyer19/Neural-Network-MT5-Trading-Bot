@@ -12,6 +12,10 @@ services:
       - "15558:15558"
     volumes:
       - ejtraderMT:/data
+    environment:
+      - DISPLAY=host.docker.internal:0
+      - MT5_PASSWORD=your_password
+      - MT5_SERVER=your_server
 
   trading_bot:
     container_name: trading_bot
@@ -28,7 +32,8 @@ services:
     build:
       context: .
       dockerfile: docker/DockerFile.mt5_bridge
-    volumes: -./bridge:/bridge
+    volumes:
+      - ./bridge:/bridge
     depends_on:
       - metatrader_service
       - trading_bot
