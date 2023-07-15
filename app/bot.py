@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import talib
 import matplotlib.pyplot as plt
-import MetaTrader5 as mt5
+import pymt5 as mt5
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam

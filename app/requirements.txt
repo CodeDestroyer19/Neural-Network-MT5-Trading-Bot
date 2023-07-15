@@ -4,3 +4,4 @@ TA-Lib
 matplotlib
 scikit-learn
 tensorflow
+pymt5
