@@ -4,7 +4,7 @@ import time
 # Connect to the trading bot container
 sio = socketio.Client()
 # Replace with the appropriate URL and port of your trading bot container
-sio.connect('http://trading_bot:8000')
+sio.connect('http://trading_bot:3000')
 
 # Handle events from the trading bot container
 
