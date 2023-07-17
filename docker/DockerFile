@@ -5,7 +5,7 @@ FROM python:3.10
 WORKDIR /app
 
 # Copy the requirements file to the working directory
-COPY app/requirements.txt .
+COPY app/requirements.txt . 
 
 # Copy the Tab-Lib dependencies to the working directory
 COPY app/Tab-Lib-deps/ta-lib-0.4.0-src.tar.gz .
@@ -21,9 +21,10 @@ RUN tar -xzf ta-lib-0.4.0-src.tar.gz && \
 
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install ejtraderMT -U
 
 # Copy the application code to the container
 COPY app/ .
 
-# Run the bot script when the container launches
+# Run the bot script using xvfb-run
 CMD [ "python", "bot.py" ]

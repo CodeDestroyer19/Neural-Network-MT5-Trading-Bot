@@ -1,39 +1,6 @@
-# Base docker image.
-FROM ubuntu:focal
+FROM ejtrader/metatrader:5
 
-# Install Wine and necessary dependencies
-RUN dpkg --add-architecture i386 && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates \
-    gnupg \
-    software-properties-common \
-    wget \
-    winbind \
-    xauth \
-    xvfb \
-    cabextract
+# Add your custom configuration and scripts here, if needed
 
-# Download and install Wine from WineHQ repository
-RUN wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/winehq.gpg && \
-    add-apt-repository 'deb https://dl.winehq.org/wine-builds/ubuntu/ focal main' && \
-    apt-get update && \
-    apt-get install -y --install-recommends winehq-stable winetricks
-
-# Create a non-root user
-RUN useradd -m -s /bin/bash trader
-
-# Set the working directory
-WORKDIR /home/trader
-
-# Install X server utilities
-RUN apt-get install -y x11-xserver-utils x11vnc xvfb
-
-# Configure X server
-RUN mkdir /tmp/.X11-unix && \
-    chown trader:trader /tmp/.X11-unix
-
-# Set up entrypoint script
-COPY mt5/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
+# Start MetaTrader 5
+CMD ["/root/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe"]

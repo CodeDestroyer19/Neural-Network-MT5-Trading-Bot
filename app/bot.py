@@ -1,7 +1,6 @@
 from keras.optimizers import Adam
 from keras.layers import Dense, Dropout
 from keras.models import Sequential
-import pymt5
 import matplotlib.pyplot as plt
 import talib
 from sklearn.preprocessing import MinMaxScaler
@@ -9,62 +8,15 @@ import numpy as np
 import pandas as pd
 import time
 import os
+import zmq
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-
-def connect_to_mt5_container():
-    server = "localhost"  # Change to the appropriate IP or hostname if necessary
-    port = 15555  # Change to the appropriate port if necessary
-    login = 123456  # Change to your MetaTrader login number if necessary
-    password = "your_password"  # Change to your MetaTrader password if necessary
-
-    # Connect to MetaTrader 5
-    mt5 = pymt5.PyMT5()
-    mt5.onConnected = onConnected
-    mt5.onDisconnected = onDisconnected
-    mt5.onData = onData
-
-    # Wait for the connection to be established
-    while not onConnected:
-        time.sleep(0.1)
-
-    # Send login request
-    login_request = {
-        'ver': '3',
-        'type': '1',
-        'login': str(login),
-        'password': password,
-        'res': '0'
-    }
-    mt5.broadcast(login_request)
-
-    # Wait for the login response
-    while not onConnected:
-        time.sleep(0.1)
-
-    # Check if login was successful
-    if onConnected:
-        print(f"Connected to MetaTrader 5: {onConnected}")
-    else:
-        print("Failed to connect to MetaTrader 5")
-
-
-def onConnected(client_info):
-    print(f"Connected: {client_info}")
-
-
-def onDisconnected(client_info):
-    print(f"Disconnected: {client_info}")
-
-
-def onData(data):
-    print(f"Received data: {data}")
 
 
 def start_mt5_bot():
     # Define the symbols and timeframes
     symbol = 'EURUSD'
-    timeframe = 60  # H1 timeframe (1 hour)
+    timeframe = 'H1'  # H1 timeframe (1 hour)
 
     # Set up initial variables
     lot_size = 0.01
@@ -92,12 +44,15 @@ def start_mt5_bot():
     neural_network_model.compile(optimizer=Adam(
         learning_rate=0.001), loss='binary_crossentropy')
 
-    def get_historical_data():
-        # Retrieve historical data
-        rates = pymt5.copy_rates_from_pos(symbol, timeframe, 0, 1000)
-        df = pd.DataFrame(rates)
-        df['time'] = pd.to_datetime(df['time'], unit='s')
-        df.set_index('time', inplace=True)
+    def get_historical_data(socket):
+        # Request historical data from MetaTrader app
+        socket.send_string(
+            f"GET_HISTORICAL_DATA {symbol} {timeframe} 01/01/2022 31/12/2022")
+
+        # Receive historical data from MetaTrader app
+        response = socket.recv_string()
+        data = pd.read_json(response)
+        df = data[['open', 'high', 'low', 'close', 'tick_volume']]
         return df
 
     def calculate_indicators_and_detect_patterns(df):
@@ -109,8 +64,8 @@ def start_mt5_bot():
         macd_fast_period = 12
         macd_slow_period = 26
         macd_signal_period = 9
-        df['macd'], _, df['macd_signal'] = talib.MACD(df['close'], fastperiod=macd_fast_period,
-                                                      slowperiod=macd_slow_period, signalperiod=macd_signal_period)
+        _, _, df['macd'] = talib.MACD(df['close'], fastperiod=macd_fast_period,
+                                      slowperiod=macd_slow_period, signalperiod=macd_signal_period)
 
         # Detect divergence based on RSI and MACD
         df['rsi_divergence'] = np.where(
@@ -129,17 +84,15 @@ def start_mt5_bot():
 
         # Detect double tops and bottoms
         df['pattern'] = 'None'
-        df['top_pattern'] = np.where(
-            (df['high'].shift(1) < df['high']) & (df['high'].shift(-1) < df['high']) &
-            (df['high'].shift(2) > df['high']) & (
-                df['high'].shift(-2) > df['high']), 'Double Top', 'None'
-        )
+        df['top_pattern'] = np.where((df['high'].shift(1) < df['high']) & (df['high'].shift(-1) < df['high']) &
+                                     (df['high'].shift(2) > df['high']) & (
+                                         df['high'].shift(-2) > df['high']),
+                                     'Double Top', 'None')
         df.loc[df['top_pattern'] != 'None', 'pattern'] = df['top_pattern']
-        df['bottom_pattern'] = np.where(
-            (df['low'].shift(1) > df['low']) & (df['low'].shift(-1) > df['low']) &
-            (df['low'].shift(2) < df['low']) & (
-                df['low'].shift(-2) < df['low']), 'Double Bottom', 'None'
-        )
+        df['bottom_pattern'] = np.where((df['low'].shift(1) > df['low']) & (df['low'].shift(-1) > df['low']) &
+                                        (df['low'].shift(2) < df['low']) & (
+                                            df['low'].shift(-2) < df['low']),
+                                        'Double Bottom', 'None')
         df.loc[df['bottom_pattern'] != 'None',
                'pattern'] = df['bottom_pattern']
 
@@ -175,9 +128,9 @@ def start_mt5_bot():
 
         return df
 
-    def execute_trade(signal, df):
+    def execute_trade(signal, df, socket):
         # Implement risk management and trade execution logic based on the signals generated
-        # Update TensorFlow neural network model with trade outcome (loss or win)
+        # Update TensorFlow neural network model with trade outcome
 
         # Calculate risk and position size based on lot size, stop loss, and take profit
         risk = lot_size * stop_loss
@@ -192,15 +145,17 @@ def start_mt5_bot():
         try:
             if signal == 'Buy':
                 # Place a buy trade
-                result = pymt5.order_send(symbol, pymt5.OP_BUY, lot_size, 0, stop_loss, take_profit,
-                                          "Buy trade", 123456, pymt5.ORDER_TIME_GTC, 0)
-                outcome = 'Win' if result.retcode == pymt5.TRADE_RETCODE_DONE else 'Loss'
+                socket.send_string(
+                    f"PLACE_TRADE {symbol} BUY {lot_size} {stop_loss} {take_profit}")
+                response = socket.recv_string()
+                outcome = 'Win' if response == 'TRADE_EXECUTED' else 'Loss'
 
             elif signal == 'Sell':
                 # Place a sell trade
-                result = pymt5.order_send(symbol, pymt5.OP_SELL, lot_size, 0, stop_loss, take_profit,
-                                          "Sell trade", 123456, pymt5.ORDER_TIME_GTC, 0)
-                outcome = 'Win' if result.retcode == pymt5.TRADE_RETCODE_DONE else 'Loss'
+                socket.send_string(
+                    f"PLACE_TRADE {symbol} SELL {lot_size} {stop_loss} {take_profit}")
+                response = socket.recv_string()
+                outcome = 'Win' if response == 'TRADE_EXECUTED' else 'Loss'
 
             # Example trade outcome information
             trade_outcome = {
@@ -294,45 +249,41 @@ def start_mt5_bot():
         plt.legend()
         plt.show()
 
-    def run_trading_bot():
-        # Connect to MetaTrader 5 container
-        connect_to_mt5_container()
+    # Connect to MetaTrader app using ZeroMQ
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect("tcp://metatrader_service:5900")
+    # Replace 'metatrader-container-ip' and 'metatrader-port' with the IP address and port of the MetaTrader container
 
-        while True:
-            try:
-                # Get historical data
-                df = get_historical_data()
+    while True:
+        try:
+            # Get historical data
+            df = get_historical_data(socket)
 
-                # Calculate indicators and detect patterns
-                df = calculate_indicators_and_detect_patterns(df)
+            # Calculate indicators and detect patterns
+            df = calculate_indicators_and_detect_patterns(df)
 
-                # Generate trade signals
-                df = generate_signals(df)
+            # Generate trade signals
+            df = generate_signals(df)
 
-                # Execute trades
-                for i in range(1, len(df)):
-                    signal = df['signal'].iloc[i]
-                    if signal != 'None':
-                        execute_trade(signal, df)
+            # Execute trades
+            for i in range(1, len(df)):
+                signal = df['signal'].iloc[i]
+                if signal != 'None':
+                    execute_trade(signal, df, socket)
 
-                # Visualize data
-                visualize_data(df)
+            # Visualize data
+            visualize_data(df)
 
-            except Exception as e:
-                print(f"Error running trading bot: {str(e)}")
+        except Exception as e:
+            print(f"Error running trading bot: {str(e)}")
 
-            # Wait for the next iteration
-            time.sleep(60)  # Adjust the time interval as needed
+        # Wait for the next iteration
+        time.sleep(60)  # Adjust the time interval as needed
 
-    # Run the trading bot
-    run_trading_bot()
-
-    # Load TensorFlow neural network model weights
-    neural_network_model.load_weights('weights/model_weights.h5')
-
-    # Disconnect from MetaTrader 5
-    pymt5.shutdown()
+    # Disconnect from ZeroMQ socket
+    socket.close()
 
 
-# Start the MetaTrader 5 bot
+# Start the MetaTrader bot
 start_mt5_bot()

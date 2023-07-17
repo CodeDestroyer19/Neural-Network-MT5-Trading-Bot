@@ -1,19 +1,14 @@
 version: "3"
 services:
   metatrader_service:
-    build:
-      context: .
-      dockerfile: docker/DockerFile.xorg
+    image: ejtrader/metatrader:5
     container_name: metatrader
     restart: unless-stopped
     environment:
       - DISPLAY=$DISPLAY
     privileged: true
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - ./mt5:/mt5
-    devices:
-      - /dev/dri:/dev/dri
+      - ejtraderMT:/data
     ports:
       - "5900:5900"
       - "15555:15555"
@@ -25,6 +20,7 @@ services:
 
   trading_bot:
     container_name: trading_bot
+    restart: unless-stopped
     build:
       context: .
       dockerfile: docker/DockerFile
@@ -53,3 +49,6 @@ services:
 networks:
   trading_network:
     driver: bridge
+
+volumes:
+  ejtraderMT: {}
