@@ -1,0 +1,59 @@
+#import <ZmqMql4Connector.mqh>
+
+// Define the ZeroMQ server endpoint
+#define ZMQ_SERVER_ENDPOINT "tcp://*:5900"
+// Replace 'metatrader-port' with the port number you want to use for communication
+
+// Define the ZeroMQ socket and context
+CZmqMql4Server g_server;
+CZmqContext g_context;
+
+// Define a function to handle incoming messages
+void OnMessageReceived(string message)
+{
+    // Process the received message and perform necessary actions
+    // ...
+
+    // Send a response message (if needed)
+    string responseMessage = "Response from MetaTrader";
+    g_server.Send(responseMessage);
+}
+
+// The start function that is called when the EA/script is initialized
+int OnInit()
+{
+    // Initialize the ZeroMQ server
+    if (!g_server.Initialize(ZMQ_SERVER_ENDPOINT, g_context, OnMessageReceived))
+    {
+        Print("Failed to initialize ZeroMQ server");
+        return INIT_FAILED;
+    }
+
+    // Start the ZeroMQ server
+    if (!g_server.Start())
+    {
+        Print("Failed to start ZeroMQ server");
+        return INIT_FAILED;
+    }
+
+    // ...
+
+    return INIT_SUCCEEDED;
+}
+
+// The main function that is called on each tick
+void OnTick()
+{
+    // ...
+}
+
+// The deinitialization function that is called when the EA/script is stopped
+void OnDeinit(const int reason)
+{
+    // Stop the ZeroMQ server
+    g_server.Stop();
+
+    // Deinitialize the ZeroMQ server and context
+    g_server.Deinitialize();
+    g_context.Terminalize();
+}

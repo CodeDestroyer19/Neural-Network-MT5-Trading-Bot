@@ -1,0 +1,105 @@
+// ZmqMql4Connector.mqh
+
+// Define the ZMQ message callback function type
+typedef void OnZmqMessageReceived(string message);
+
+class CZmqMql4Server
+{
+private:
+    string m_endpoint;                  // ZeroMQ server endpoint
+    int m_socket;                       // ZeroMQ socket
+    int m_context;                      // ZeroMQ context
+    OnZmqMessageReceived @m_callback;   // Message callback function
+
+public:
+    // Constructor
+    CZmqMql4Server()
+    {
+        m_socket = -1;
+        m_context = -1;
+    }
+
+    // Destructor
+    ~CZmqMql4Server()
+    {
+        Deinitialize();
+    }
+
+    // Initialize the ZeroMQ server
+    bool Initialize(string endpoint, OnZmqMessageReceived @callback)
+    {
+        m_endpoint = endpoint;
+        m_callback = @callback;
+
+        m_context = zmq_init(1);
+        if (m_context == -1)
+            return false;
+
+        m_socket = zmq_socket(m_context, ZMQ_REP);
+        if (m_socket == -1)
+            return false;
+
+        int bindResult = zmq_bind(m_socket, m_endpoint);
+        if (bindResult == -1)
+            return false;
+
+        return true;
+    }
+
+    // Start the ZeroMQ server
+    bool Start()
+    {
+        if (m_socket == -1 || m_context == -1)
+            return false;
+
+        while (true)
+        {
+            string message = Receive();
+            if (message != "")
+                m_callback(message);
+        }
+
+        return true;
+    }
+
+    // Stop the ZeroMQ server
+    void Stop()
+    {
+        if (m_socket != -1)
+            zmq_close(m_socket);
+        m_socket = -1;
+    }
+
+    // Send a message from the server
+    void Send(string message)
+    {
+        if (m_socket != -1)
+            zmq_send(m_socket, message, StringLen(message), 0);
+    }
+
+    // Receive a message in the server
+    string Receive()
+    {
+        if (m_socket != -1)
+        {
+            string message;
+            int receivedBytes = zmq_recv(m_socket, message, 4096, 0);
+            if (receivedBytes > 0)
+                return message;
+        }
+
+        return "";
+    }
+
+    // Deinitialize the ZeroMQ server
+    void Deinitialize()
+    {
+        if (m_socket != -1)
+            zmq_close(m_socket);
+        if (m_context != -1)
+            zmq_term(m_context);
+
+        m_socket = -1;
+        m_context = -1;
+    }
+};
