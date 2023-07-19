@@ -1,7 +1,7 @@
 from keras.optimizers import Adam
 from keras.layers import Dense, Dropout
 from keras.models import Sequential
-import pymt5
+import MetaTrader5 as mt5
 import matplotlib.pyplot as plt
 import talib
 from sklearn.preprocessing import MinMaxScaler
@@ -18,53 +18,23 @@ def connect_to_mt5_container():
     login = 123456  # Change to your MetaTrader login number if necessary
     password = "your_password"  # Change to your MetaTrader password if necessary
 
-    # Connect to MetaTrader 5
-    mt5 = pymt5.PyMT5()
-    mt5.onConnected = onConnected
-    mt5.onDisconnected = onDisconnected
-    mt5.onData = onData
+    # Initialize MetaTrader 5
+    mt5.initialize()
 
-    # Wait for the connection to be established
-    while not onConnected:
-        time.sleep(0.1)
-
-    # Send login request
-    login_request = {
-        'ver': '3',
-        'type': '1',
-        'login': str(login),
-        'password': password,
-        'res': '0'
-    }
-    mt5.broadcast(login_request)
-
-    # Wait for the login response
-    while not onConnected:
-        time.sleep(0.1)
-
-    # Check if login was successful
-    if onConnected:
-        print(f"Connected to MetaTrader 5: {onConnected}")
-    else:
+    # Connect to MetaTrader 5 server
+    connected = mt5.login(login, password, server=server, port=port)
+    if not connected:
         print("Failed to connect to MetaTrader 5")
+        return False
 
-
-def onConnected(client_info):
-    print(f"Connected: {client_info}")
-
-
-def onDisconnected(client_info):
-    print(f"Disconnected: {client_info}")
-
-
-def onData(data):
-    print(f"Received data: {data}")
+    print(f"Connected to MetaTrader 5: {mt5.terminal_info()}")
+    return True
 
 
 def start_mt5_bot():
     # Define the symbols and timeframes
     symbol = 'EURUSD'
-    timeframe = 60  # H1 timeframe (1 hour)
+    timeframe = mt5.TIMEFRAME_H1  # H1 timeframe (1 hour)
 
     # Set up initial variables
     lot_size = 0.01
@@ -94,7 +64,7 @@ def start_mt5_bot():
 
     def get_historical_data():
         # Retrieve historical data
-        rates = pymt5.copy_rates_from_pos(symbol, timeframe, 0, 1000)
+        rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, 1000)
         df = pd.DataFrame(rates)
         df['time'] = pd.to_datetime(df['time'], unit='s')
         df.set_index('time', inplace=True)
@@ -109,8 +79,10 @@ def start_mt5_bot():
         macd_fast_period = 12
         macd_slow_period = 26
         macd_signal_period = 9
-        df['macd'], _, df['macd_signal'] = talib.MACD(df['close'], fastperiod=macd_fast_period,
-                                                      slowperiod=macd_slow_period, signalperiod=macd_signal_period)
+        macd, macd_signal, _ = talib.MACD(df['close'], fastperiod=macd_fast_period,
+                                          slowperiod=macd_slow_period, signalperiod=macd_signal_period)
+        df['macd'] = macd
+        df['macd_signal'] = macd_signal
 
         # Detect divergence based on RSI and MACD
         df['rsi_divergence'] = np.where(
@@ -192,15 +164,41 @@ def start_mt5_bot():
         try:
             if signal == 'Buy':
                 # Place a buy trade
-                result = pymt5.order_send(symbol, pymt5.OP_BUY, lot_size, 0, stop_loss, take_profit,
-                                          "Buy trade", 123456, pymt5.ORDER_TIME_GTC, 0)
-                outcome = 'Win' if result.retcode == pymt5.TRADE_RETCODE_DONE else 'Loss'
+                request = {
+                    'action': mt5.TRADE_ACTION_DEAL,
+                    'symbol': symbol,
+                    'volume': lot_size,
+                    'type': mt5.ORDER_TYPE_BUY,
+                    'price': mt5.symbol_info_tick(symbol).ask,
+                    'sl': mt5.symbol_info_tick(symbol).ask - stop_loss * mt5.symbol_info(symbol).point,
+                    'tp': mt5.symbol_info_tick(symbol).ask + take_profit * mt5.symbol_info(symbol).point,
+                    'deviation': 0,
+                    'magic': 123456,
+                    'comment': "Buy trade",
+                    'type_time': mt5.ORDER_TIME_GTC,
+                    'type_filling': mt5.ORDER_FILLING_RETURN,
+                }
+                result = mt5.order_send(request)
+                outcome = 'Win' if result.retcode == mt5.TRADE_RETCODE_DONE else 'Loss'
 
             elif signal == 'Sell':
                 # Place a sell trade
-                result = pymt5.order_send(symbol, pymt5.OP_SELL, lot_size, 0, stop_loss, take_profit,
-                                          "Sell trade", 123456, pymt5.ORDER_TIME_GTC, 0)
-                outcome = 'Win' if result.retcode == pymt5.TRADE_RETCODE_DONE else 'Loss'
+                request = {
+                    'action': mt5.TRADE_ACTION_DEAL,
+                    'symbol': symbol,
+                    'volume': lot_size,
+                    'type': mt5.ORDER_TYPE_SELL,
+                    'price': mt5.symbol_info_tick(symbol).bid,
+                    'sl': mt5.symbol_info_tick(symbol).bid + stop_loss * mt5.symbol_info(symbol).point,
+                    'tp': mt5.symbol_info_tick(symbol).bid - take_profit * mt5.symbol_info(symbol).point,
+                    'deviation': 0,
+                    'magic': 123456,
+                    'comment': "Sell trade",
+                    'type_time': mt5.ORDER_TIME_GTC,
+                    'type_filling': mt5.ORDER_FILLING_RETURN,
+                }
+                result = mt5.order_send(request)
+                outcome = 'Win' if result.retcode == mt5.TRADE_RETCODE_DONE else 'Loss'
 
             # Example trade outcome information
             trade_outcome = {
@@ -296,7 +294,9 @@ def start_mt5_bot():
 
     def run_trading_bot():
         # Connect to MetaTrader 5 container
-        connect_to_mt5_container()
+        connected = connect_to_mt5_container()
+        if not connected:
+            return
 
         while True:
             try:
@@ -327,11 +327,8 @@ def start_mt5_bot():
     # Run the trading bot
     run_trading_bot()
 
-    # Load TensorFlow neural network model weights
-    neural_network_model.load_weights('weights/model_weights.h5')
-
     # Disconnect from MetaTrader 5
-    pymt5.shutdown()
+    mt5.shutdown()
 
 
 # Start the MetaTrader 5 bot
