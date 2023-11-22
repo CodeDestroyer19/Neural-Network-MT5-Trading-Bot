@@ -1,0 +1,26 @@
+<!-- dashboard.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Dashboard</title>
+</head>
+<body>
+    <h1>Trading Dashboard</h1>
+
+    <div>
+        <p><strong>Username:</strong> {{ username }}</p>
+        <p><strong>Account Balance:</strong> {{ account_balance }} <small>{{ account_currency }}</small></p>
+    </div>
+
+    <form action="/logout" method="post">
+        <button type="submit">Logout</button>
+    </form>
+
+    <form action="/start_ml_bot" method="post">
+        <button type="submit">Start ML Bot</button>
+    </form>
+</body>
+</html>

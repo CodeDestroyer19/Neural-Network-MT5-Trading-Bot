@@ -1,0 +1,9 @@
+# requirements.txt
+pandas
+numpy
+scikit-learn
+TA-Lib
+matplotlib
+MetaTrader5
+tensorflow
+flask

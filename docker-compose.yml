@@ -1,55 +1,17 @@
-version: "3"
+version: '3'
 services:
-  metatrader_service:
+  trading-bot:
     build:
       context: .
-      dockerfile: docker/DockerFile.xorg
-    container_name: metatrader
-    restart: unless-stopped
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./src:/app/src
+      - ./static:/app/static
+      - ./templates:/app/templates
+      - ./model_weights.h5:/app/model_weights.h5
     environment:
-      - DISPLAY=$DISPLAY
-    privileged: true
-    volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - ./mt5:/mt5
-    devices:
-      - /dev/dri:/dev/dri
-    ports:
-      - "5900:5900"
-      - "15555:15555"
-      - "15556:15556"
-      - "15557:15557"
-      - "15558:15558"
-    networks:
-      - trading_network
-
-  trading_bot:
-    container_name: trading_bot
-    build:
-      context: .
-      dockerfile: docker/DockerFile
-    volumes:
-      - ./app:/app
-    ports:
-      - 3000:3000
-    depends_on:
-      - metatrader_service
-    networks:
-      - trading_network
-
-  mt5_bridge:
-    container_name: mt5_bridge
-    build:
-      context: .
-      dockerfile: docker/DockerFile.mt5_bridge
-    volumes:
-      - ./bridge:/bridge
-    depends_on:
-      - metatrader_service
-      - trading_bot
-    networks:
-      - trading_network
-
-networks:
-  trading_network:
-    driver: bridge
+      - FLASK_APP=main.py
+      - FLASK_RUN_HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
