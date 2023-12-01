@@ -96,7 +96,7 @@ def update_neural_network_model(trade_outcome: dict, dataset_path: str) -> None:
         model = load_model('model_weights.h5')
     except (OSError, ValueError):
         # If loading fails, create a new model
-        input_shape = (4,)  # Replace with the actual input shape
+        input_shape = (5,)  # Replace with the actual input shape
         model = create_neural_network_model(input_shape)
         compile_neural_network_model(model, learning_rate=0.001)
 

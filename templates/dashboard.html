@@ -6,6 +6,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Dashboard</title>
+
+    <!-- Include Chart.js from a CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <h1>Trading Dashboard</h1>
@@ -15,12 +18,93 @@
         <p><strong>Account Balance:</strong> {{ account_balance }} <small>{{ account_currency }}</small></p>
     </div>
 
-    <form action="/logout" method="post">
-        <button type="submit">Logout</button>
+    <!-- Add a canvas element for the chart -->
+    <canvas id="tradeChart" width="800" height="400"></canvas>
+
+    <form action="/stop_ml_bot" method="get">
+        <button type="submit">Stop ML Bot</button>
     </form>
 
-    <form action="/start_ml_bot" method="post">
-        <button type="submit">Start ML Bot</button>
-    </form>
+    <!-- Use a button without a form to start the ML Bot -->
+    <button onclick="startBot()">Start ML Bot</button>
+
+    <script>
+        // Function to update the chart with new trade signals
+        function updateChart(tradeSignals) {
+            // Parse the JSON-formatted string to an object
+            const parsedTradeSignals = JSON.parse(tradeSignals);
+
+            // Extract relevant data for the chart (modify as needed)
+            const timestamps = parsedTradeSignals.map(signal => signal.time);
+            const prices = parsedTradeSignals.map(signal => signal.close);
+
+            // Get the canvas element
+            const ctx = document.getElementById('tradeChart');
+
+            // Destroy existing chart if it exists
+            if (ctx.chart) {
+                ctx.chart.destroy();
+            }
+
+            // Initialize the chart
+            const myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [{
+                        label: 'Close Price',
+                        data: prices,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'minute' // Adjust as needed
+                            }
+                        },
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+
+        // Function to periodically update the chart
+        function periodicallyUpdateChart() {
+            // Fetch the latest trade signals from the server
+            fetch('/get_latest_trade_signals')
+                .then(response => response.json())
+                .then(tradeSignals => {
+                    // Update the chart with the new trade signals
+                    updateChart(tradeSignals);
+
+                    // Schedule the next update
+                    setTimeout(periodicallyUpdateChart, 5000); // Update every 5 seconds
+                })
+                .catch(error => {
+                    console.error('Error fetching trade signals:', error);
+                    // Retry the update after an interval
+                    setTimeout(periodicallyUpdateChart, 5000); // Retry after 5 seconds
+                });
+        }
+
+        // Start the initial chart update
+        periodicallyUpdateChart();
+
+        function startBot() {
+            // Send an asynchronous request to start the bot
+            fetch('/start_ml_bot', { method: 'POST' });
+
+            // Optionally, you can add logic here to update the UI or provide feedback to the user
+            console.log('Bot started!');
+        }
+    </script>
 </body>
 </html>

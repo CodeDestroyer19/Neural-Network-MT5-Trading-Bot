@@ -71,3 +71,8 @@ def get_account_info():
     account_info = mt5.account_info()
 
     return account_info
+
+def stop_mt5_ml_bot():
+
+    mt5.shutdown()
+    return "Disconnected from MetaTrader 5"
